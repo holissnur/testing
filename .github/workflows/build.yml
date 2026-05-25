@@ -33,16 +33,15 @@ jobs:
           --windows-console-mode=disable `
           --enable-plugin=tk-inter `
           --assume-yes-for-downloads `
-          --company-name="er" `
+          --company-name="ER" `
           --product-name="AutoFill Utility" `
           --file-version="1.0.0.0" `
           --product-version="1.0.0.0" `
           --file-description="Automated text processing and file fill tool" `
           --experimental=use_DLLSupport_directory `
           --nofollow-import-to=PIL `
-          --exclude-module=PIL `
-          --exclude-module=matplotlib `
-          --exclude-module=numpy `
+          --nofollow-import-to=matplotlib `
+          --nofollow-import-to=numpy `
           AutoFill_Script.py
 
     - name: Clean Output Directory Files
