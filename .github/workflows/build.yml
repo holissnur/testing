@@ -1,4 +1,4 @@
-name: Compile Python to EXE
+name: Compile Python to EXE (Fast Build)
 
 on:
   push:
@@ -21,6 +21,17 @@ jobs:
     - name: Setup MSVC Compiler
       uses: ilammy/msvc-dev-cmd@v1
 
+    # SPEED UP 1: Cache Nuitka's C++ compilation results between workflow runs
+    - name: Configure Nuitka Compiler Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~\AppData\Local\Nuitka\Nuitka
+          ~\AppData\Local\clcache
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('**/AutoFill_Script.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -32,8 +43,11 @@ jobs:
           --standalone `
           --windows-console-mode=disable `
           --enable-plugin=tk-inter `
+          --enable-plugin=anti-bloat `
+          --lto=no `
           --assume-yes-for-downloads `
           --windows-dependency-tool=pefile `
+          --experimental=use_internal_directory `
           --company-name="YourNameOrCompany" `
           --product-name="AutoFill Utility" `
           --file-version="1.0.0.0" `
