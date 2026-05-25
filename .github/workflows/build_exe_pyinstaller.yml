@@ -1,7 +1,7 @@
-name: Compile with PyInstaller
+name: Compile with PyInstaller (Signed & Safe)
 
 on:
-  workflow_dispatch: # Allows you to trigger this manually from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,18 +16,12 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Setup MSVC Compiler
-      uses: ilammy/msvc-dev-cmd@v1
-
-    - name: Install Dependencies and Rebuild Bootloader
-      env:
-        PYINSTALLER_COMPILE_BOOTLOADER: 1 # Compiles custom bootloader to avoid virus flags
+    - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install openpyxl pymupdf
-        pip install --no-binary :all: pyinstaller
+        pip install pyinstaller openpyxl pymupdf
 
-    - name: Build EXE with PyInstaller
+    - name: Build EXE with PyInstaller Folder Layout
       run: |
         pyinstaller `
           --onedir `
@@ -36,8 +30,19 @@ jobs:
           --contents-directory="DLLSupport" `
           AutoFill_Script.py
 
+    # FIX: Generate a custom certificate and digitally sign the EXE to fix False Positives
+    - name: Digitally Sign Executable
+      shell: powershell
+      run: |
+        echo "Creating self-signed code certificate..."
+        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=AutoFillUtility" -CertStoreLocation Cert:\CurrentUser\My
+        
+        echo "Signing the executable file..."
+        $exePath = "dist/AutoFill_Script/AutoFill_Script.exe"
+        Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
+
     - name: Upload Executable Artifact Folder
       uses: actions/upload-artifact@v4
       with:
-        name: AutoFill_PyInstaller_Output
+        name: AutoFill_PyInstaller_Signed
         path: dist/AutoFill_Script/
