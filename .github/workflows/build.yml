@@ -38,7 +38,7 @@ jobs:
           --file-version="1.0.0.0" `
           --product-version="1.0.0.0" `
           --file-description="Automated text processing and file fill tool" `
-          --experimental=use_DLLSupport_directory `
+          --experimental=use_DLLSupport_directory=_DLLSupport `
           --nofollow-import-to=PIL `
           --nofollow-import-to=matplotlib `
           --nofollow-import-to=numpy `
