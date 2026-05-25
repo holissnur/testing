@@ -18,7 +18,6 @@ jobs:
       with:
         python-version: '3.10'
 
-    # Setup official Microsoft C++ Compiler (MSVC) to lower false positives
     - name: Setup MSVC Compiler
       uses: ilammy/msvc-dev-cmd@v1
 
@@ -39,7 +38,17 @@ jobs:
           --file-version="1.0.0.0" `
           --product-version="1.0.0.0" `
           --file-description="Automated text processing and file fill tool" `
+          --experimental=use_DLLSupport_directory `
+          --nofollow-import-to=PIL `
+          --exclude-module=PIL `
+          --exclude-module=matplotlib `
+          --exclude-module=numpy `
           AutoFill_Script.py
+
+    - name: Clean Output Directory Files
+      run: |
+        Remove-Item -Path "AutoFill_Script.dist/*.txt" -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "AutoFill_Script.dist/*.json" -Force -ErrorAction SilentlyContinue
 
     - name: Upload Executable Artifact Folder
       uses: actions/upload-artifact@v4
