@@ -1,0 +1,66 @@
+name: Production Build (Stable Subfolder Layout)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Setup Official Microsoft Compiler
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Configure Compiler Cache
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\Nuitka\Nuitka
+        key: ${{ runner.os }}-nuitka-v3-${{ hashFiles('AutoFill_Script.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-v3-
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka openpyxl pymupdf pefile
+
+    # Build utilizing Nuitka's native internal layout engine to prevent launch crashes
+    - name: Build Clean Native Binary
+      run: |
+        python -m nuitka `
+          --standalone `
+          --windows-console-mode=disable `
+          --enable-plugin=tk-inter `
+          --enable-plugin=anti-bloat `
+          --lto=no `
+          --assume-yes-for-downloads `
+          --windows-dependency-tool=pefile `
+          --experimental=use_collection_layout=flat-dist-with-internal `
+          --company-name="LegitSoftwareCorp" `
+          --product-name="AutoFill Automation Utility" `
+          --file-version="1.0.0.0" `
+          --product-version="1.0.0.0" `
+          --file-description="Verified Office Automation Tool" `
+          --nofollow-import-to=PIL `
+          --nofollow-import-to=matplotlib `
+          --nofollow-import-to=numpy `
+          AutoFill_Script.py
+
+    - name: Clean Output Directory Files
+      run: |
+        Remove-Item -Path "AutoFill_Script.dist/*.txt" -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "AutoFill_Script.dist/*.json" -Force -ErrorAction SilentlyContinue
+
+    - name: Upload Executable Artifact Folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: AutoFill_Final_Stable_Build
+        path: AutoFill_Script.dist/
