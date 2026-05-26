@@ -1,0 +1,68 @@
+name: Compile with cx_Freeze (Signed & Safe)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install cx_Freeze openpyxl pymupdf
+
+    - name: Generate cx_Freeze Setup Script
+      shell: powershell
+      run: |
+        @'
+        import sys
+        from cx_Freeze import setup, Executable
+
+        build_exe_options = {
+            "packages": ["openpyxl", "fitz"], # fitz is the internal name for pymupdf
+            "include_files": [], # Add external asset paths here if needed
+            "excludes": ["tkinter", "unittest"], # Exclude heavy unused modules
+        }
+
+        base = "Win32GUI" if sys.platform == "win32" else None
+
+        setup(
+            name="AutoFill_Script",
+            version="1.0",
+            description="AutoFill Utility App",
+            options={"build_exe": build_exe_options},
+            executables=[Executable("AutoFill_Script.py", base=base, target_name="AutoFill_Script.exe")],
+        )
+        '@ | Out-File -FilePath setup.py -Encoding utf8
+
+    # Builds an uncompressed directory structure which is highly virus-scanner safe
+    - name: Build EXE with cx_Freeze
+      run: |
+        python setup.py build_exe
+
+    # FIX: Generate a custom certificate and digitally sign the EXE to fix False Positives
+    - name: Digitally Sign Executable
+      shell: powershell
+      run: |
+        echo "Creating self-signed code certificate..."
+        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=AutoFillUtility" -CertStoreLocation Cert:\CurrentUser\My
+        
+        echo "Signing the executable file..."
+        $exePath = "build/exe.win-amd64-3.10/AutoFill_Script.exe"
+        Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
+
+    - name: Upload Executable Artifact Folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: AutoFill_cxFreeze_Signed
+        path: build/exe.win-amd64-3.10/
