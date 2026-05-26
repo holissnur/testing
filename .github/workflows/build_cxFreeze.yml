@@ -37,6 +37,7 @@ jobs:
             "excludes": ["unittest", "test"],
             "zip_include_packages": ["*"],
             "zip_exclude_packages": [],
+            "include_msvcr": True,
         }
 
         base = None 
