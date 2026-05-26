@@ -16,6 +16,10 @@ jobs:
       with:
         python-version: '3.10'
 
+    # FIX: Initialize the Microsoft Visual C++ (MSVC) Command Prompt environment variables
+    - name: Set up MSVC Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
@@ -35,7 +39,6 @@ jobs:
             "zip_exclude_packages": [],
         }
 
-        # Use standard console base so our custom bootstrap C++ binary can hand off smoothly
         base = None 
 
         setup(
@@ -50,28 +53,22 @@ jobs:
       run: |
         python setup.py build_exe
 
-    # FIX: Restructure everything cleanly using an external staging folder to avoid the self-nesting loop error
+    # Fixed spelling and layout staging out of loop
     - name: Restructure Folders for Pristine Root
       shell: powershell
       run: |
         $buildDir = "build/exe.win-amd64-3.10"
         $stagingDir = "build/staging_temp"
         
-        # 1. Create a pristine staging directory structure outside the build path
         New-Item -ItemType Directory -Force -Path "$stagingDir/lib" | Out-Null
-        
-        # 2. Move everything from the build folder into the staging lib directory
         Get-ChildItem -Path $buildDir | Move-Item -Destination "$stagingDir/lib"
         
-        # 3. Clean up the empty build folder and replace it with the perfect layout
         Remove-Item -Recurse -Force $buildDir
         Move-Item -Path $stagingDir -Destination $buildDir
         
-        # Verify the root looks beautifully clean (should only show the 'lib' folder right now)
         Write-Host "--- Verifying Staged Layout (Root) ---"
         Get-ChildItem -Path $buildDir
 
-    # FIX: Compile a tiny, native C++ launcher to load DLLs securely from /lib/
     - name: Compile Native C++ Search-Path Bootstrapper
       shell: powershell
       run: |
@@ -80,19 +77,15 @@ jobs:
         #include <string>
 
         int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-            // 1. Force the OS to seek DLL runtimes natively from the "lib" subfolder
             SetDllDirectoryW(L"lib");
-            
-            // 2. Resolve the target path cleanly
             std::wstring appToRun = L"lib\\core_app.exe";
             
-            // 3. Spawns the underlying python process silently without flashing terminal windows
             STARTUPINFOW si = { sizeof(si) };
             PROCESS_INFORMATION pi;
             si.dwFlags = STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE; 
 
-            if (CreateProcessW(NULL, &appToRun[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            if (CreateProcessW(NULL, &appToRun, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
@@ -100,10 +93,9 @@ jobs:
         }
         '@ | Out-File -FilePath launcher.cpp -Encoding utf8
         
-        # Compile via standard MSVC compiler available on Github Runners
+        # Now recognized perfectly because MSVC path hooks are mapped into the shell!
         cl.exe /O2 /Fe:build/exe.win-amd64-3.10/AutoFill_Script.exe launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib kernel32.lib
 
-    # Digitally sign the final wrapper binary to prevent antivirus interference
     - name: Digitally Sign Executable wrapper
       shell: powershell
       run: |
@@ -114,7 +106,6 @@ jobs:
         $exePath = "build/exe.win-amd64-3.10/AutoFill_Script.exe"
         Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
 
-    # Uploads the directory layout
     - name: Upload Executable Artifact Folder
       uses: actions/upload-artifact@v4
       with:
