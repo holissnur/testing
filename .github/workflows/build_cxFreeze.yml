@@ -64,7 +64,7 @@ jobs:
         Get-ChildItem -Path $buildDir | Move-Item -Destination "$stagingDir/lib"
         
         # 3. Clean up the empty build folder and replace it with the perfect layout
-        Remove-Item -Recururse -Force $buildDir
+        Remove-Item -Recurse -Force $buildDir
         Move-Item -Path $stagingDir -Destination $buildDir
         
         # Verify the root looks beautifully clean (should only show the 'lib' folder right now)
