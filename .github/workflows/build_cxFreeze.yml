@@ -50,19 +50,26 @@ jobs:
       run: |
         python setup.py build_exe
 
-    # FIX: Restructure everything into a dedicated 'lib' directory
+    # FIX: Restructure everything cleanly using an external staging folder to avoid the self-nesting loop error
     - name: Restructure Folders for Pristine Root
       shell: powershell
       run: |
-        cd build/exe.win-amd64-3.10/
-        mkdir root_temp
+        $buildDir = "build/exe.win-amd64-3.10"
+        $stagingDir = "build/staging_temp"
         
-        # Move absolutely everything into the lib directory
-        Move-Item -Path ./* -Destination ./lib/ -Exclude "root_temp"
-        Move-Item -Path ./lib/root_temp -Destination ./
+        # 1. Create a pristine staging directory structure outside the build path
+        New-Item -ItemType Directory -Force -Path "$stagingDir/lib" | Out-Null
         
-        # Check layout stability
-        Get-ChildItem ./lib/
+        # 2. Move everything from the build folder into the staging lib directory
+        Get-ChildItem -Path $buildDir | Move-Item -Destination "$stagingDir/lib"
+        
+        # 3. Clean up the empty build folder and replace it with the perfect layout
+        Remove-Item -Recururse -Force $buildDir
+        Move-Item -Path $stagingDir -Destination $buildDir
+        
+        # Verify the root looks beautifully clean (should only show the 'lib' folder right now)
+        Write-Host "--- Verifying Staged Layout (Root) ---"
+        Get-ChildItem -Path $buildDir
 
     # FIX: Compile a tiny, native C++ launcher to load DLLs securely from /lib/
     - name: Compile Native C++ Search-Path Bootstrapper
