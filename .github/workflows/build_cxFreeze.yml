@@ -16,7 +16,7 @@ jobs:
       with:
         python-version: '3.10'
 
-    # FIX: Initialize the Microsoft Visual C++ (MSVC) Command Prompt environment variables
+    # Initialize the Microsoft Visual C++ (MSVC) Command Prompt environment variables for cl.exe
     - name: Set up MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
@@ -53,39 +53,51 @@ jobs:
       run: |
         python setup.py build_exe
 
-    # Fixed spelling and layout staging out of loop
+    # Staging process to restructure everything into a clean 'lib' folder
     - name: Restructure Folders for Pristine Root
       shell: powershell
       run: |
         $buildDir = "build/exe.win-amd64-3.10"
         $stagingDir = "build/staging_temp"
         
+        # 1. Create a pristine staging directory structure outside the build path
         New-Item -ItemType Directory -Force -Path "$stagingDir/lib" | Out-Null
+        
+        # 2. Move everything from the build folder into the staging lib directory
         Get-ChildItem -Path $buildDir | Move-Item -Destination "$stagingDir/lib"
         
+        # 3. Clean up the empty build folder and replace it with the perfect layout
         Remove-Item -Recurse -Force $buildDir
         Move-Item -Path $stagingDir -Destination $buildDir
         
+        # Verify the root looks beautifully clean (should only show the 'lib' folder right now)
         Write-Host "--- Verifying Staged Layout (Root) ---"
         Get-ChildItem -Path $buildDir
 
+    # Compile a native C++ launcher to load system DLLs securely from the /lib/ folder
     - name: Compile Native C++ Search-Path Bootstrapper
       shell: powershell
       run: |
         @'
         #include <windows.h>
         #include <string>
+        #include <vector>
 
         int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
             SetDllDirectoryW(L"lib");
-            std::wstring appToRun = L"lib\\core_app.exe";
             
+            // Use a mutable wchar_t vector buffer to satisfy CreateProcessW's LPWSTR signature
+            std::wstring targetPath = L"lib\\core_app.exe";
+            std::vector<wchar_t> pathBuffer(targetPath.begin(), targetPath.end());
+            pathBuffer.push_back(L'\0'); // Ensure null-termination
+
             STARTUPINFOW si = { sizeof(si) };
             PROCESS_INFORMATION pi;
             si.dwFlags = STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE; 
 
-            if (CreateProcessW(NULL, &appToRun, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            // Pass the data pointer of the buffer to satisfy the Windows API compiler check
+            if (CreateProcessW(NULL, pathBuffer.data(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             }
@@ -93,9 +105,10 @@ jobs:
         }
         '@ | Out-File -FilePath launcher.cpp -Encoding utf8
         
-        # Now recognized perfectly because MSVC path hooks are mapped into the shell!
+        # Compile via standard MSVC compiler
         cl.exe /O2 /Fe:build/exe.win-amd64-3.10/AutoFill_Script.exe launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib kernel32.lib
 
+    # Digitally sign the final wrapper binary to prevent antivirus interference
     - name: Digitally Sign Executable wrapper
       shell: powershell
       run: |
@@ -106,6 +119,7 @@ jobs:
         $exePath = "build/exe.win-amd64-3.10/AutoFill_Script.exe"
         Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
 
+    # Uploads the directory layout containing only AutoFill_Script.exe and the lib directory
     - name: Upload Executable Artifact Folder
       uses: actions/upload-artifact@v4
       with:
