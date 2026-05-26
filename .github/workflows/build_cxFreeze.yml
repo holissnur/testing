@@ -1,4 +1,4 @@
-name: Compile with cx_Freeze (Signed & Safe)
+name: Compile with cx_Freeze (Strict Clean Root Layout)
 
 on:
   workflow_dispatch:
@@ -29,29 +29,75 @@ jobs:
         from cx_Freeze import setup, Executable
 
         build_exe_options = {
-            "packages": ["openpyxl", "fitz"], # fitz is the internal name for pymupdf
-            "include_files": [], # Add external asset paths here if needed
-            "excludes": ["tkinter", "unittest"], # Exclude heavy unused modules
+            "packages": ["os", "sys", "tkinter", "openpyxl", "et_xmlfile", "fitz"],
+            "excludes": ["unittest", "test"],
+            "zip_include_packages": ["*"],
+            "zip_exclude_packages": [],
         }
 
-        base = "Win32GUI" if sys.platform == "win32" else None
+        # Use standard console base so our custom bootstrap C++ binary can hand off smoothly
+        base = None 
 
         setup(
-            name="AutoFill_Script",
+            name="AutoFill_Internal",
             version="1.0",
-            description="AutoFill Utility App",
             options={"build_exe": build_exe_options},
-            executables=[Executable("AutoFill_Script.py", base=base, target_name="AutoFill_Script.exe")],
+            executables=[Executable("AutoFill_Script.py", base=base, target_name="core_app.exe")],
         )
         '@ | Out-File -FilePath setup.py -Encoding utf8
 
-    # Builds an uncompressed directory structure which is highly virus-scanner safe
-    - name: Build EXE with cx_Freeze
+    - name: Build EXE Base Layout
       run: |
         python setup.py build_exe
 
-    # FIX: Generate a custom certificate and digitally sign the EXE to fix False Positives
-    - name: Digitally Sign Executable
+    # FIX: Restructure everything into a dedicated 'lib' directory
+    - name: Restructure Folders for Pristine Root
+      shell: powershell
+      run: |
+        cd build/exe.win-amd64-3.10/
+        mkdir root_temp
+        
+        # Move absolutely everything into the lib directory
+        Move-Item -Path ./* -Destination ./lib/ -Exclude "root_temp"
+        Move-Item -Path ./lib/root_temp -Destination ./
+        
+        # Check layout stability
+        Get-ChildItem ./lib/
+
+    # FIX: Compile a tiny, native C++ launcher to load DLLs securely from /lib/
+    - name: Compile Native C++ Search-Path Bootstrapper
+      shell: powershell
+      run: |
+        @'
+        #include <windows.h>
+        #include <string>
+
+        int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+            // 1. Force the OS to seek DLL runtimes natively from the "lib" subfolder
+            SetDllDirectoryW(L"lib");
+            
+            // 2. Resolve the target path cleanly
+            std::wstring appToRun = L"lib\\core_app.exe";
+            
+            // 3. Spawns the underlying python process silently without flashing terminal windows
+            STARTUPINFOW si = { sizeof(si) };
+            PROCESS_INFORMATION pi;
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_HIDE; 
+
+            if (CreateProcessW(NULL, &appToRun[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+            return 0;
+        }
+        '@ | Out-File -FilePath launcher.cpp -Encoding utf8
+        
+        # Compile via standard MSVC compiler available on Github Runners
+        cl.exe /O2 /Fe:build/exe.win-amd64-3.10/AutoFill_Script.exe launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib kernel32.lib
+
+    # Digitally sign the final wrapper binary to prevent antivirus interference
+    - name: Digitally Sign Executable wrapper
       shell: powershell
       run: |
         echo "Creating self-signed code certificate..."
@@ -61,8 +107,9 @@ jobs:
         $exePath = "build/exe.win-amd64-3.10/AutoFill_Script.exe"
         Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
 
+    # Uploads the directory layout
     - name: Upload Executable Artifact Folder
       uses: actions/upload-artifact@v4
       with:
-        name: AutoFill_cxFreeze_Signed
+        name: AutoFill_StrictClean_Signed
         path: build/exe.win-amd64-3.10/
