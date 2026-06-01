@@ -33,7 +33,7 @@ jobs:
         from cx_Freeze import setup, Executable
 
         build_exe_options = {
-            "packages": ["os", "sys", "tkinter", "openpyxl", "et_xmlfile", "fitz"],
+            "packages": ["os", "sys", "tkinter", "traceback", "openpyxl", "et_xmlfile", "fitz"],
             "excludes": ["unittest", "test"],
             "zip_include_packages": ["*"],
             "zip_exclude_packages": [],
@@ -46,7 +46,7 @@ jobs:
             name="AutoFill_Internal",
             version="1.0",
             options={"build_exe": build_exe_options},
-            executables=[Executable("AutoFill_Script.py", base=base, target_name="core_app.exe")],
+            executables=[Executable("AutoFillEnv_Script.py", base=base, target_name="core_app.exe")],
         )
         '@ | Out-File -FilePath setup.py -Encoding utf8
 
@@ -107,7 +107,7 @@ jobs:
         '@ | Out-File -FilePath launcher.cpp -Encoding utf8
         
         # Compile via standard MSVC compiler
-        cl.exe /O2 /Fe:build/exe.win-amd64-3.10/AutoFill_Script.exe launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib kernel32.lib
+        cl.exe /O2 /Fe:build/exe.win-amd64-3.10/AutoFillEnv_Script.exe launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib kernel32.lib
 
     # Digitally sign the final wrapper binary to prevent antivirus interference
     - name: Digitally Sign Executable wrapper
@@ -117,7 +117,7 @@ jobs:
         $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=AutoFillUtility" -CertStoreLocation Cert:\CurrentUser\My
         
         echo "Signing the executable file..."
-        $exePath = "build/exe.win-amd64-3.10/AutoFill_Script.exe"
+        $exePath = "build/exe.win-amd64-3.10/AutoFillEnv_Script.exe"
         Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert
 
     # Uploads the directory layout containing only AutoFill_Script.exe and the lib directory
